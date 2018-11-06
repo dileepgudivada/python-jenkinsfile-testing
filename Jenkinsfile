@@ -53,10 +53,6 @@ pipeline {
                 """
                 sh """
                     export PATH=${VIRTUAL_ENV}/bin:${PATH}
-                    make flake8 | tee report/flake8.log || true
-                """
-                sh """
-                    export PATH=${VIRTUAL_ENV}/bin:${PATH}
                     make pylint | tee report/pylint.log || true
                 """
                 step([$class: 'WarningsPublisher',
