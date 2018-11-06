@@ -40,95 +40,45 @@ pipeline {
                     pip install -r requirements.txt -r dev-requirements.txt
                     make clean
                 """
+       stages {
+        stage('Build') {
+            agent {
+                docker {
+                    image 'python:2-alpine'
+                }
+            }
+            steps {
+                sh 'python -m py_compile sources/add2vals.py sources/calc.py'
             }
         }
-        stage ('Unit Tests') {
-            steps {
-                sh """
-                    #. venv/bin/activate
-                    export PATH=${VIRTUAL_ENV}/bin:${PATH}
-                    make unittest || true
-                """
+        stage('Test') {
+            agent {
+                docker {
+                    image 'qnib/pytest'
+                }
             }
-
+            steps {
+                sh 'py.test --verbose --junit-xml test-reports/results.xml sources/test_calc.py'
+            }
             post {
                 always {
-                    junit keepLongStdio: true, testResults: 'report/nosetests.xml'
-                    publishHTML target: [
-                        reportDir: 'report/coverage',
-                        reportFiles: 'index.html',
-                        reportName: 'Coverage Report - Unit Test'
-                    ]
+                    junit 'test-reports/results.xml'
                 }
             }
         }
-
-        stage ('System Tests') {
-            steps {
-                sh """
-                    #. venv/bin/activate
-                    export PATH=${VIRTUAL_ENV}/bin:${PATH}
-                    // Write file containing test node connection information if needed.
-                    // writeFile file: "test/fixtures/nodes.yaml", text: "---\n- node: <some-ip>\n"
-                    make systest || true
-                """
+        stage('Deliver') {
+            agent {
+                docker {
+                    image 'cdrx/pyinstaller-linux:python2'
+                }
             }
-
+            steps {
+                sh 'pyinstaller --onefile sources/add2vals.py'
+            }
             post {
-                always {
-                    junit keepLongStdio: true, testResults: 'report/nosetests.xml'
-                    publishHTML target: [
-                        reportDir: 'report/coverage',
-                        reportFiles: 'index.html',
-                        reportName: 'Coverage Report - System Test'
-                    ]
+                success {
+                    archiveArtifacts 'dist/add2vals'
                 }
             }
         }
-
-        stage ('Docs') {
-            steps {
-                sh """
-                    #. venv/bin/activate
-                    export PATH=${VIRTUAL_ENV}/bin:${PATH}
-                    PYTHONPATH=. pdoc --html --html-dir docs --overwrite env.projectName
-                """
-            }
-
-            post {
-                always {
-                    publishHTML target: [
-                        reportDir: 'docs/*',
-                        reportFiles: 'index.html',
-                        reportName: 'Module Documentation'
-                    ]
-                }
-            }
-        }
-
-        stage ('Cleanup') {
-            steps {
-                sh 'rm -rf venv'
-            }
-        }
-    }
-
-    post {
-        failure {
-            mail body: "${env.JOB_NAME} (${env.BUILD_NUMBER}) ${env.projectName} build error " +
-                       "is here: ${env.BUILD_URL}\nStarted by ${env.BUILD_CAUSE}" ,
-                 from: env.emailFrom,
-                 //replyTo: env.emailFrom,
-                 subject: "${env.projectName} ${env.JOB_NAME} (${env.BUILD_NUMBER}) build failed",
-                 to: env.emailTo
-        }
-        success {
-            mail body: "${env.JOB_NAME} (${env.BUILD_NUMBER}) ${env.projectName} build successful\n" +
-                       "Started by ${env.BUILD_CAUSE}",
-                 from: env.emailFrom,
-                 //replyTo: env.emailFrom,
-                 subject: "${env.projectName} ${env.JOB_NAME} (${env.BUILD_NUMBER}) build successful",
-                 to: env.emailTo
-        }
-    }
 }
